@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:safewatch:fall-classification:1.0",
+  "title": "Offline recording classification result",
+  "type": "object",
+  "required": ["schema_version", "model", "label_scope", "score", "threshold", "prediction"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "model": {"const": "inceptiontime"},
+    "label_scope": {"const": "recording"},
+    "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "threshold": {"type": "number"},
+    "prediction": {"type": "integer", "enum": [0, 1]},
+    "window_scores": {"type": "array", "minItems": 1, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+    "audit": {"type": "object"}
+  },
+  "additionalProperties": false
+}

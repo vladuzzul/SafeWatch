@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safewatch-ml"
+version = "0.1.0"
+description = "PyTorch InceptionTime component for the SafeWatch companion system"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["torch>=2.6,<3", "numpy>=1.26,<3", "pandas>=2.2,<4"]
+
+[project.optional-dependencies]
+train = ["mlflow>=3,<4", "scikit-learn>=1.5,<2", "matplotlib>=3.9,<4", "scipy>=1.13,<2"]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+safewatch-train = "safewatch_ml.train:main"
+safewatch-predict = "safewatch_ml.predict:main"
+safewatch-prepare-data = "safewatch_ml.prepare:main"
+safewatch-mlflow = "safewatch_ml.tracking:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

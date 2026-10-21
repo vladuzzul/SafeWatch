@@ -1,0 +1,11 @@
+recording_index,path,subject,label,score,threshold,prediction,fold,model
+104,processed/subject_07/non-fall/clap.csv,subject_07,0,0.9215526580810548,0.6616765260696411,1,1,inceptiontime
+155,processed/subject_10/non-fall/clap.csv,subject_10,0,0.7213111519813538,0.6616765260696411,1,1,inceptiontime
+160,processed/subject_10/non-fall/teeth.csv,subject_10,0,0.9066998958587646,0.6616765260696411,1,1,inceptiontime
+307,processed/subject_19/non-fall/clap.csv,subject_19,0,0.7024024128913879,0.5,1,2,inceptiontime
+137,processed/subject_09/non-fall/clap.csv,subject_09,0,0.7298637628555298,0.7260950207710266,1,3,inceptiontime
+33,processed/subject_03/fall/fall1.csv,subject_03,1,0.4590916037559509,0.5,0,4,inceptiontime
+41,processed/subject_03/non-fall/cloth.csv,subject_03,0,0.5010210275650024,0.5,1,4,inceptiontime
+191,processed/subject_12/non-fall/cloth.csv,subject_12,0,0.8634202480316162,0.5,1,4,inceptiontime
+219,processed/subject_14/fall/fall4.csv,subject_14,1,0.3726764619350433,0.5,0,4,inceptiontime
+248,processed/subject_15/non-fall/wash.csv,subject_15,0,0.5593927502632141,0.5,1,4,inceptiontime

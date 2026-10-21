@@ -1,0 +1,44 @@
+# Python environment and generated builds
+.venv/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Local dataset, weights, tracking storage and archived experiments
+/data/*
+!/data/README.md
+/artifacts/
+/archive/
+/mlruns/
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.db
+*.db-shm
+*.db-wal
+/docs/research/*.pdf
+
+# Secrets and workstation files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+.idea/
+.vscode/
+
+# Future app/firmware generated files
+**/node_modules/
+**/coverage/
+**/.dart_tool/
+**/.gradle/
+**/.pio/
+**/DerivedData/
+**/Pods/
