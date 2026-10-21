@@ -31,21 +31,22 @@ def write_report(output, results, predictions, complete):
         summary[f"{key}_fold_std"] = float(np.std(values))
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     pd.DataFrame([summary]).to_csv(output / "summary.csv", index=False)
-    status = "Evaluare completa" if complete else "Verificare partiala a fluxului"
+    status = "Full evaluation" if complete else "Quick pipeline check"
     report = f"""# InceptionTime: {status}
 
-- Inregistrari evaluate: {len(frame)}
-- Acuratete: {metrics['accuracy']:.4%}
-- Sensibilitate: {metrics['sensitivity']:.4%}
-- Specificitate: {metrics['specificity']:.4%}
+- Recordings tested: {len(frame)}
+- Accuracy: {metrics['accuracy']:.4%}
+- Sensitivity (falls found): {metrics['sensitivity']:.4%}
+- Specificity (non-falls correctly identified): {metrics['specificity']:.4%}
 - F1: {metrics['f1']:.4f}
-- Caderi ratate: {fn}; alarme false: {fp}.
+- Missed fall recordings: {fn}; false alarms: {fp}.
 
-Pragurile si epocile sunt selectate doar pe validare, cu persoane distincte.
-Evaluarea este pe inregistrari complete, folosind multiple instance learning.
-ROC-AUC/AP agregate sunt descriptive; consultati si mediile pe folduri.
-O verificare partiala nu inlocuieste validarea incrucisata completa.
-Rezultatele nu masoara intarzierea detectarii sau alarmele pe ora in flux continuu.
+The training stop point and decision threshold are chosen using validation data only.
+Training, validation and test data come from different people in each fold.
+These results describe whole recordings. The highest window score represents each recording.
+Pooled ROC-AUC and average precision combine scores from separate models. Also check the fold averages.
+A quick pipeline check does not replace the full five-fold evaluation.
+These results do not measure detection delay or false alarms per hour on a continuous signal.
 """
     (output / "report.md").write_text(report)
     return summary

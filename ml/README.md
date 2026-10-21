@@ -1,110 +1,203 @@
-# Componenta ML
+# Fall detection with InceptionTime
 
-Pachetul `safewatch_ml` contine o singura arhitectura activa: InceptionTime
-individual in PyTorch, cu 6 module, 16 filtre pe ramura, kerneluri 9/19/39,
-conexiuni reziduale si samanta 11. Configuratia se afla in
-`configs/inceptiontime.json`.
+This folder contains the ML code for fall classification. It uses one
+InceptionTime model in PyTorch. The settings are in
+[configs/inceptiontime.json](configs/inceptiontime.json).
 
-## Organizare
+The current model classifies complete sensor recordings. Work on real-time
+alerts is still needed.
 
-- `src/safewatch_ml/models.py`: definitia retelei.
-- `data.py`: citirea si normalizarea datelor, ferestrele si partitiile pe persoane.
-- `prepare.py`: conversia MAT in CSV si generarea indexului.
-- `train.py`: antrenarea si urmarirea in MLflow.
-- `metrics.py`, `evaluate.py`: praguri, metrici si raportul evaluarii.
-- `inference.py`: clasa reutilizabila `FallDetector`, fara importuri MLflow/sklearn.
-- `predict.py`: comanda pentru clasificarea unui CSV.
-- `tracking.py`: pornirea MLflow cu stocarea in `artifacts/mlflow/`.
-- `tests/`: verificari cu semnale sintetice, independente de datasetul local.
+## Setup
 
-Instalare din radacina proiectului:
+Run the commands below from the project root, the folder that contains
+`Makefile` and `ml/`.
+
+Use Python 3.11 or newer. Create a virtual environment if one does not exist:
 
 ```bash
-.venv/bin/python -m pip install -e './ml[train,dev]'
+python3 -m venv .venv
 ```
 
-`pyproject.toml` separa dependentele de inferenta de cele optionale `train` si
-`dev`. `requirements-lock.txt` pastreaza versiunile mediului experimentului
-initial. Pentru reproducerea lui, instaleaza mai intai acel lock, apoi pachetul
-cu `pip install --no-deps -e ./ml`.
+Install the package and the tools used for training and tests:
 
-## Dataset si pregatire
+```bash
+make setup
+```
 
-Datasetul local se afla in `data/hifd/raw/`, CSV-urile in
-`data/hifd/processed/`, iar indexul este `data/hifd/index.csv`.
+This runs `pip install -e './ml[train,dev]'`. The `-e` option means that changes
+to the source code are used without installing the package again. The `train`
+and `dev` groups add tools for training and testing.
+
+`requirements-lock.txt` lists the package versions from the first experiment.
+To use those versions, install that file before installing the local package:
+
+```bash
+.venv/bin/python -m pip install -r ml/requirements-lock.txt
+.venv/bin/python -m pip install --no-deps -e ./ml
+```
+
+## Data
+
+The model uses the HIFD dataset. See the [data guide](../data/README.md) for the
+source and local folder layout.
+
+Each recording has one label:
+
+- `1`: the recording contains a fall.
+- `0`: the recording does not contain a fall.
+
+Prepare the CSV files and index with:
 
 ```bash
 make prepare-data
 ```
 
-Conversia pastreaza canalele originale. Antrenarea utilizeaza doar
-`ax, ay, az, droll, dpitch, dyaw`, in aceasta ordine. Timestamp-urile duplicate
-sunt mediate, apoi semnalele sunt interpolate pe o grila de 50 Hz.
-Acceleratia folosita in dataset are gravitatia eliminata. Un alt dispozitiv
-trebuie sa furnizeze semnale cu aceleasi conventii si unitati.
+Training uses six channels, in this order:
 
-## Antrenare
+```text
+ax, ay, az, droll, dpitch, dyaw
+```
+
+The first three describe acceleration. The last three describe rotation speed.
+The model does not use the heart signal or orientation values.
+
+The data is sampled at 50 Hz: 50 measurements per second. When several rows
+have the same timestamp, their values are averaged. The values are then placed
+on a regular time grid. The dataset acceleration already has gravity removed.
+Data from another device must use matching units and sensor settings.
+
+## How training works
+
+A recording is split into six-second windows. Each window contains 300
+measurements. Windows start every three seconds during training and every
+0.6 seconds during validation and testing.
+
+A fall recording may also contain rest before or after the fall. To avoid
+marking all of those windows as falls, the model gives each window a score
+and uses the highest score for the whole recording. Training compares that
+result with the recording label. This method is called multiple instance
+learning.
+
+The data is divided into five groups, called folds. Each group is used once
+for testing. Within each fold, training, validation and test recordings come
+from different people:
+
+- Training data teaches the model.
+- Validation data chooses when to stop training and where to set the decision threshold.
+- Test data checks the saved model on people it did not learn from.
+
+The mean and standard deviation used to scale the inputs are calculated from
+training data only. The threshold aims to find as many falls as possible while
+correctly identifying at least 95% of non-fall validation recordings. The test
+results can be different.
+
+Start the full evaluation with:
 
 ```bash
 make train
 ```
 
-Cele 5 folduri sunt separate pe persoane; din fiecare set de dezvoltare se
-rezerva alte persoane pentru validare. Normalizarea, selectia epocii si pragul
-nu folosesc persoanele de test. O configuratie produce un singur model pentru
-fiecare fold. Nu exista selectarea altor arhitecturi sau combinarea modelelor.
-
-Ferestrele au 6 secunde. Pasul este 3 secunde la antrenare si 0,6 secunde la
-validare/test. Deoarece etichetele sunt pe inregistrari, pierderea foloseste
-maximul logiturilor ferestrelor unei inregistrari (multiple instance learning).
-Pragul maximizeaza sensibilitatea pe validare cu specificitate de cel putin
-95%; aceasta specificitate nu este garantata pe test.
-
-Rularile noi se salveaza in `artifacts/runs/`. Fiecare checkpoint contine
-ponderile, configuratia, normalizarea, pragul si persoanele folosite la evaluare.
-Pentru o verificare rapida, `make smoke` limiteaza rularea la 1 epoca si 1 fold;
-rezultatul este marcat explicit ca evaluare partiala.
-
-## Folosirea modelului
-
-Din terminal, dupa instalarea pachetului:
+For a quick check of the training code, run:
 
 ```bash
-safewatch-predict --checkpoint artifacts/models/inceptiontime/cv/fold_1/checkpoint.pt --recording data/hifd/processed/subject_07/fall/fall1.csv
+make smoke
 ```
 
-Dintr-o viitoare componenta Python:
+The quick check runs one epoch, which is one pass through the training data,
+and one fold. Its results are marked as a partial evaluation.
+
+New runs are saved in `artifacts/runs/`. A full run saves five separate models
+of the same type, one for each fold. They are used separately.
+
+Each saved model file, called a checkpoint, contains the learned weights,
+settings, input scaling values, decision threshold and participant groups.
+
+## Use a saved model
+
+You can use the saved weights without training again:
+
+```bash
+make predict
+```
+
+By default, this uses the first fold checkpoint and an example recording.
+You can choose other files:
+
+```bash
+make predict CHECKPOINT=artifacts/models/inceptiontime/cv/fold_1/checkpoint.pt RECORDING=data/hifd/processed/subject_07/fall/fall1.csv
+```
+
+To use the model from Python:
 
 ```python
 from safewatch_ml.inference import FallDetector
 
 detector = FallDetector("artifacts/models/inceptiontime/cv/fold_1/checkpoint.pt")
 result = detector.predict_csv("data/hifd/processed/subject_07/fall/fall1.csv")
-# Sau: detector.predict_signal(array_samples_by_6_channels, sample_rate=50)
 ```
 
-Detectorul se incarca o singura data si poate fi reutilizat. Intrarea array are
-forma `[numar_esantioane, 6]` si trebuie sa fie esantionata uniform la 50 Hz.
-`score` este un scor de clasificare, nu o probabilitate calibrata. Rezultatul
-respecta contractul din `shared/contracts/fall-classification.schema.json`.
+Load the detector once and reuse it for more recordings. This class does not
+import MLflow or scikit-learn.
 
-Toate cele 5 checkpoint-uri InceptionTime din evaluarea originala sunt pastrate
-in `artifacts/models/inceptiontime/cv/fold_1` ... `fold_5`. Cel din primul fold
-este referinta fixa pentru exemple, nu un model final ales dupa cel mai bun test.
-Nu au fost schimbate ponderile in timpul reorganizarii.
+For a NumPy array, use `detector.predict_signal(signal, sample_rate=50)`.
+The array must have shape `[number_of_samples, 6]`, with the channel order
+listed above and regular sampling at 50 Hz.
 
-## MLflow
+The result includes:
+
+| Field | Meaning |
+|---|---|
+| `score` | The model score between 0 and 1; it is not a verified probability |
+| `threshold` | The cutoff used to make the decision |
+| `prediction` | `1` if the score reaches the threshold; otherwise `0` |
+| `label_scope` | `recording`, because the decision describes the whole recording |
+| `window_scores` | The score of each window |
+| `schema_version` | The result format version |
+
+The result format is defined in
+[fall-classification.schema.json](../shared/contracts/fall-classification.schema.json).
+
+The five original InceptionTime checkpoints are stored in
+`artifacts/models/inceptiontime/cv/fold_1/` through `fold_5/`. The first fold
+is a fixed example, not a final model chosen for its test score. Data and
+weights are kept outside Git and must be restored on a new computer.
+
+## Track runs with MLflow
 
 ```bash
 make mlflow
 ```
 
-Interfata se afla la http://127.0.0.1:5000. Stocarea este
-`artifacts/mlflow/mlflow.db`, iar fisierele sunt in
-`artifacts/mlflow/artifacts/`. Rularile noi folosesc experimentul
-`SafeWatch-InceptionTime`. Experimentele vechi raman vizibile ca istoric.
-Pentru alt port: `make mlflow PORT=5050`.
+Open [MLflow](http://127.0.0.1:5000). New runs use the
+`SafeWatch-InceptionTime` experiment. Earlier experiments remain in the history.
 
-Nu este necesara reantrenarea pentru a folosi checkpoint-urile locale existente.
-Pentru alerte in timp real sunt necesare ulterior adnotari temporale, evaluare
-pe fluxuri continue si o implementare de preprocesare potrivita dispozitivului.
+MLflow saves the settings, scores over training, data splits and model files.
+Its database is `artifacts/mlflow/mlflow.db`. Its saved files are in
+`artifacts/mlflow/artifacts/`.
+
+To use another port, run `make mlflow PORT=5050`.
+
+## Tests
+
+```bash
+make test
+```
+
+The tests use small, generated signals. They do not need the local dataset
+or trained weights.
+
+## Main source files
+
+| File in `src/safewatch_ml/` | Purpose |
+|---|---|
+| `models.py` | Defines InceptionTime |
+| `prepare.py` | Converts MAT files to CSV and creates the index |
+| `data.py` | Reads recordings, creates windows and splits people into groups |
+| `train.py` | Trains the model and logs results in MLflow |
+| `metrics.py` and `evaluate.py` | Choose thresholds, calculate scores and write reports |
+| `inference.py` | Loads a saved model and makes predictions |
+| `predict.py` | Runs a prediction from the terminal |
+| `tracking.py` | Starts the local MLflow server |
+
+See the [model results and limits](../docs/ml/model-card.md) and
+[research sources](../docs/research/README.md) for more detail.
